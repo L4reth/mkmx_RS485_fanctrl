@@ -83,7 +83,7 @@ int main(void)
 	_delay_ms(50);
 	//u8DeviceAdres = ReadArdress();
 	u8DeviceAdres = 10;
-	DDRA |= (1<<DDRA0);
+	DDRA |= (1<<DDRA3);
 	/////// UART ////////
 	Protocolinit();
 	//PORTA |= (1<<PORTA4); //wysylanie
@@ -92,21 +92,24 @@ int main(void)
 	
 	//uart_puts("PwmFan");
 	_delay_ms(30);
+	PORTA ^= (1<<PORTA3);
+	_delay_ms(200);
+	PORTA ^= (1<<PORTA3);
 	//PORTA &=~ (1<<PORTA4); //odbieranie
 	
 	//PORTA |= (1<<PORTA4); //wysylanie
 	while(1)
 	{
-		if(TXC0 == 1)			
-			PORTA &=~ (1<<PORTA4); //odbieranie
+// 		if(TXC0 == 1)			
+// 			PORTA &=~ (1<<PORTA4); //odbieranie
 			
 		u16LastRPM = SpeedRetrun(u16Period, u8stopFlag);
 		//PID(u16SetRPM, u16LastRPM);		
 		ParseData();
 		OCR0A = szybkosc;
 		
-		if(TXC0 == 1)			
-			PORTA &=~ (1<<PORTA4); //odbieranie
+// 		if(TXC0 == 1)			
+// 			PORTA &=~ (1<<PORTA4); //odbieranie
 // 		PORTA &=~ (1<<PORTA4); //odbieranie
 // 		uint16_t u16ster = uart_getc();
 //		OCR0A = (u16ster);

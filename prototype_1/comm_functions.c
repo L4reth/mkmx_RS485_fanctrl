@@ -7,9 +7,9 @@ struct								//strukura ramki danych
 	uint8_t u8Addr;					//Adres
 	uint8_t u8Cmd;					//Komenda
 	uint8_t u8PayloadLen;			//D³ugoœc obszaru danych
-	uint8_t u8Payload[16];			//obszar danych o zdefinowanej d³ugoœci
+	uint8_t u8Payload[PL_LENGHT];			//obszar danych o zdefinowanej d³ugoœci
 	uint8_t u8CRC;					//suma kontolna
-	uint8_t u8RawData[3+16];		//ramka zebrana w jednej tablicy
+	uint8_t u8RawData[3+PL_LENGHT];		//ramka zebrana w jednej tablicy
 }sFrame;
 
 enum				//Stany automatu
@@ -90,6 +90,7 @@ uint8_t ReadArdress(void)
 	DDRA &=~ (1<<DDA7);
 	
 	//usatwiony internal pull up
+	
 	PUEA = 0b10101001;
 	
 	uint8_t u8Devadrr = 0;
@@ -213,7 +214,6 @@ void ParseData(void)
 // 				uart_puts("/n");
 			}
 		}
-		_delay_ms(100);	
 }
 
 void Protocolinit(void)
@@ -239,8 +239,7 @@ void ParseFrame(void)
 			case SET_SPEED:		//0x02				
 			{
 				//u16SetRPM  = (sFrame.u8Payload[0] << 8) + sFrame.u8Payload[1];
-				szybkosc = sFrame.u8Payload[0];
-				PORTA |= (1<<PORTA4);
+				szybkosc = sFrame.u8Payload[0];			
 			}				
 			break;
 			
@@ -347,7 +346,6 @@ void sendNumber(uint32_t _nb)
 		}
 	}
 }
-
 
 void blink(void) //debug diode on pin PA5
 {

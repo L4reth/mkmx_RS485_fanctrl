@@ -1,47 +1,14 @@
-/*************************************************************************
-Title:    Interrupt UART library with receive/transmit circular buffers
-Author:   Peter Fleury <pfleury@gmx.ch>   http://tinyurl.com/peterfleury
-File:     $Id: uart.c,v 1.15.2.4 2015/09/05 18:33:32 peter Exp $
-Software: AVR-GCC 4.x
-Hardware: any AVR with built-in UART, 
-License:  GNU General Public License 
-          
-DESCRIPTION:
-    An interrupt is generated when the UART has finished transmitting or
-    receiving a byte. The interrupt handling routines use circular buffers
-    for buffering received and transmitted data.
-    
-    The UART_RX_BUFFER_SIZE and UART_TX_BUFFER_SIZE variables define
-    the buffer size in bytes. Note that these variables must be a 
-    power of 2.
-    
-USAGE:
-    Refere to the header file uart.h for a description of the routines. 
-    See also example test_uart.c.
-
-NOTES:
-    Based on Atmel Application Note AVR306
-                    
-LICENSE:
-    Copyright (C) 2015 Peter Fleury, GNU General Public License Version 3
-
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-                        
-*************************************************************************/
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include "uart.h"
 
+#define I_WILL_BE_TRANSMITTING		DIR_PORT |= (1 << DIR_PIN)
+#define I_WILL_BE_RECEIVING			DIR_PORT &= ~(1 << DIR_PIN)
 
+/*
+ *  constants and macros
+ */
 
 /* size of RX/TX buffers */
 #define UART_RX_BUFFER_MASK ( UART_RX_BUFFER_SIZE - 1)
@@ -213,13 +180,15 @@ LICENSE:
       defined(__AVR_ATmega328__) || defined(__AVR_ATmega328P__) || \
       defined(__AVR_ATmega3250__) || defined(__AVR_ATmega3290__) ||defined(__AVR_ATmega6450__) || defined(__AVR_ATmega6490__)
  /* ATmega with one USART */
- #define UART0_RECEIVE_INTERRUPT   USART_RX_vect
- #define UART0_TRANSMIT_INTERRUPT  USART_UDRE_vect
+ #define UART0_RECEIVE_INTERRUPT   USART0_RX_vect
+ #define UART0_TRANSMIT_INTERRUPT  USART0_UDRE_vect
+ #define UART0_TRANSMIT_ENDED	   USART0_TX_vect
  #define UART0_STATUS      UCSR0A
  #define UART0_CONTROL     UCSR0B
  #define UART0_CONTROLC    UCSR0C
  #define UART0_DATA        UDR0
  #define UART0_UDRIE       UDRIE0
+ #define UART0_TXCIE       TXCIE0
  #define UART0_UBRRL       UBRR0L
  #define UART0_UBRRH       UBRR0H
  #define UART0_BIT_U2X     U2X0
@@ -327,13 +296,15 @@ LICENSE:
  #define UART0_BIT_TXEN    TXEN1
  #define UART0_BIT_UCSZ0   UCSZ10
  #define UART0_BIT_UCSZ1   UCSZ11
- 
-#elif defined(_AVR_ATTINY841_H_INCLUDED) // modified 
+
+#elif defined(_AVR_ATTINY841_H_INCLUDED) // modified
 #define ATMEGA_USART1
 #define UART0_RECEIVE_INTERRUPT   USART0_RX_vect
 #define UART1_RECEIVE_INTERRUPT   USART1_RX_vect
 #define UART0_TRANSMIT_INTERRUPT  USART0_UDRE_vect
 #define UART1_TRANSMIT_INTERRUPT  USART1_UDRE_vect
+#define UART0_TRANSMIT_ENDED	  USART0_TX_vect
+#define UART1_TRANSMIT_ENDED	  USART1_TX_vect
 
 #define UART0_STATUS      UCSR0A
 #define UART0_CONTROL     UCSR0B
@@ -342,10 +313,10 @@ LICENSE:
 #define UART0_UDRIE       UDRIE0
 #define UART0_UBRRL       UBRR0L
 #define UART0_UBRRH       UBRR0H
+#define UART0_TXCIE		  TXCIE0
 #define UART0_BIT_U2X     U2X0
 #define UART0_BIT_RXCIE   RXCIE0
 #define UART0_BIT_RXEN    RXEN0
-#define UART0_TXCIE		  TXCIE0
 #define UART0_BIT_TXEN    TXEN0
 #define UART0_BIT_UCSZ0   UCSZ00
 #define UART0_BIT_UCSZ1   UCSZ01
@@ -364,8 +335,9 @@ LICENSE:
 #define UART1_BIT_UCSZ0   UCSZ10
 #define UART1_BIT_UCSZ1   UCSZ11
 #else
- #error "no UART definition for MCU available"
+#error "no UART definition for MCU available"
 #endif
+
 
 
 
@@ -391,16 +363,6 @@ static volatile unsigned char UART1_LastRxError;
 #endif
 
 
-ISR(USART0_TX_vect)
-/*************************************************************************
-Function: UART Transmit Complete interrupt
-Purpose:  
-**************************************************************************/
-{
-	UART0_CONTROL &=~_BV(UART0_TXCIE);
-	I_WILL_BE_RECEIVING;
-	PORTA ^= (1<<PORTA);
-}
 
 ISR (UART0_RECEIVE_INTERRUPT)	
 /*************************************************************************
@@ -413,7 +375,6 @@ Purpose:  called when the UART has received a character
     unsigned char usr;
     unsigned char lastRxError;
  
-
  
     /* read UART status register and UART data register */
     usr  = UART0_STATUS;
@@ -454,19 +415,25 @@ Purpose:  called when the UART is ready to transmit the next byte
 {
     unsigned char tmptail;
 
-    
     if ( UART_TxHead != UART_TxTail) {
         /* calculate and store new buffer index */
         tmptail = (UART_TxTail + 1) & UART_TX_BUFFER_MASK;
         UART_TxTail = tmptail;
         /* get one byte from buffer and write it to UART */
         UART0_DATA = UART_TxBuf[tmptail];  /* start transmission */
-    }else{
-        /* tx buffer empty, disable UDRE interrupt */
-        UART0_CONTROL &= ~_BV(UART0_UDRIE);
+    } else {
+	    /* tx buffer empty, disable UDRE interrupt, enable TXC interrupt*/
+		UART0_CONTROL |= _BV(UART0_TXCIE);
+	    UART0_CONTROL &= ~_BV(UART0_UDRIE);
     }
 }
 
+ISR (UART0_TRANSMIT_ENDED)
+{
+	UART0_CONTROL &= ~_BV(UART0_TXCIE);
+	I_WILL_BE_RECEIVING;
+	
+}
 
 /*************************************************************************
 Function: uart_init()
@@ -521,9 +488,10 @@ void uart_init(unsigned int baudrate)
     UART0_CONTROLC = (1<<UART0_BIT_UCSZ1)|(1<<UART0_BIT_UCSZ0);
     #endif 
     #endif
-		 
-		 DIR_DDR |= (1 << DIR_PIN);
-		 I_WILL_BE_RECEIVING;
+
+	DIR_DDR |= (1 << DIR_PIN);
+
+	I_WILL_BE_RECEIVING;
 }/* uart_init */
 
 
@@ -579,10 +547,10 @@ void uart_putc(unsigned char data)
     
     UART_TxBuf[tmphead] = data;
     UART_TxHead = tmphead;
-	
-		I_WILL_BE_TRANSMITTING;
 
-    /* enable UDRE interrupt */
+	I_WILL_BE_TRANSMITTING;
+    
+	/* enable UDRE interrupt */
     UART0_CONTROL    |= _BV(UART0_UDRIE);
 
 }/* uart_putc */
@@ -603,8 +571,8 @@ void uart_puts(const char *s )
 
 void uart_putdata(const uint8_t *d, const uint16_t l)
 {
-	for (uint16_t i = 0; i<l;i++)
-		uart_putc(d[i]);
+	for (uint16_t i = 0; i < l; i++)
+		uart_putc(d[i]);		
 }
 
 /*************************************************************************
@@ -670,7 +638,7 @@ Purpose:  called when the UART1 is ready to transmit the next byte
 **************************************************************************/
 {
     unsigned char tmptail;
-	//I_WILL_BE_TRANSMITTING;
+
     
     if ( UART1_TxHead != UART1_TxTail) {
         /* calculate and store new buffer index */

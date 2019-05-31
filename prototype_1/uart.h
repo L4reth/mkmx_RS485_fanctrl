@@ -7,15 +7,12 @@ File:     $Id: uart.h,v 1.13 2015/01/11 13:53:25 peter Exp $
 Software: AVR-GCC 4.x, AVR Libc 1.4 or higher
 Hardware: any AVR with built-in UART/USART
 Usage:    see Doxygen manual
-
 LICENSE:
     Copyright (C) 2015 Peter Fleury, GNU General Public License Version 3
-
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 3 of the License, or
     any later version.
-
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -49,7 +46,6 @@ LICENSE:
 
 #include <avr/pgmspace.h>
 
-
 #if (__GNUC__ * 100 + __GNUC_MINOR__) < 405
 #error "This library requires AVR-GCC 4.5 or later, update to newer AVR-GCC compiler !"
 #endif
@@ -74,6 +70,10 @@ LICENSE:
  *  @param  baudRate baudrate in bps, e.g. 1200, 2400, 9600     
  */
 #define UART_BAUD_SELECT_DOUBLE_SPEED(baudRate,xtalCpu) ( ((((xtalCpu) + 4UL * (baudRate)) / (8UL * (baudRate)) -1UL)) | 0x8000)
+
+#define DIR_PORT		PORTA
+#define DIR_DDR			DDRA
+#define DIR_PIN			4
 
 /** @brief  Size of the circular receive buffer, must be power of 2
  * 
@@ -107,12 +107,7 @@ LICENSE:
 #define UART_BUFFER_OVERFLOW  0x0200              /**< @brief receive ringbuffer overflow */
 #define UART_NO_DATA          0x0100              /**< @brief no receive data available   */
 
-#define DIR_PORT		PORTA
-#define DIR_DDR			DDRA
-#define DIR_PIN			4
 
-#define I_WILL_BE_TRANSMITTING		DIR_PORT |= (1 << DIR_PIN)
-#define I_WILL_BE_RECEIVING			DIR_PORT &= ~(1 << DIR_PIN)
 /*
 ** function prototypes
 */
@@ -172,6 +167,8 @@ extern void uart_putc(unsigned char data);
  */
 extern void uart_puts(const char *s );
 
+extern void uart_putdata(const uint8_t *d, const uint16_t l);
+
 /**
  * @brief    Put string from program memory to ringbuffer for transmitting via UART.
  *
@@ -209,4 +206,3 @@ extern void uart1_puts_p(const char *s );
 
 
 #endif // UART_H 
-
