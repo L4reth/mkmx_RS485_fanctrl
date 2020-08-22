@@ -2,9 +2,9 @@ mkmx_RS485_fanctrl
 
 Fan controler with speed measurment working in RS485 network.
 
-Device measure fan speed in RPM, adjust speed to wanted value. Using USART device 
+Device measure fan speed in RPM, adjust speed to requested value. Using USART device 
 recives necessary values from master device. Device can also respond via USART with 
-current speed or any orher wanted information. 
+current speed or any orher information. 
 
 Defined frame in network:
 
